@@ -259,21 +259,21 @@ if __name__ == '__main__':
     train_dataset_supervised, test_dataset = get_dataset(args)
 
     # Training
-    if args.FL_STAGE == 1:                                                              # train Fine-tuned ASR W_0^G
+    if args.FL_STAGE == 1:                                                                  # train Fine-tuned ASR W_0^G
         print("| Start FL Training Stage 1 -- Global Train ASR |")
-        args.STAGE = 0                                                                  # 0: train ASR encoder & decoder
+        args.STAGE = 0                                                                      # 0: train ASR encoder & decoder
         GlobalTrainASR(args=args, train_dataset_supervised=train_dataset_supervised, test_dataset=test_dataset)                      
-                                                                                        # Train ASR encoder & decoder
+                                                                                            # Train ASR encoder & decoder
         print("| FL Training Stage 1 Done|")
     elif args.FL_STAGE == 2:
         print("| Stage 2 Discarded!!|")
-    elif args.FL_STAGE == 3:                                                            # K-means clustering
+    elif args.FL_STAGE == 3:                                                                # K-means clustering
         print("| Start FL Training Stage 3|")
         Kmeans_clustering(args, train_dataset_supervised, test_dataset)
         print("| FL Training Stage 3 Done|")
-    elif args.FL_STAGE == 4:                                                            # FL train ASR decoder
+    elif args.FL_STAGE == 4:                                                                # FL train ASR decoder
         print("| Start FL Training Stage 4|")
-        args.STAGE = 0                                                                  # train ASR encoder as well
+        args.STAGE = 0                                                                      # train ASR encoder as well
         CPFL_TrainASR(args, train_dataset_supervised, test_dataset)
         print("| FL Training Stage 4 Done|")
     else:
