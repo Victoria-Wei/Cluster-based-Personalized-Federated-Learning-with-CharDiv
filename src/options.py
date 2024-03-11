@@ -50,7 +50,7 @@ def args_parser():
     parser.add_argument('-client_id', '--client_id', type=str, default="public", help="client_id: public, 0, or 1")
     # 2023/04/24
     parser.add_argument('--global_ep', type=int, default=30, help="number for global model")
-    parser.add_argument('--GPU_batchsize', type=str, default=None, help="如果cpu滿了就用GPU")
+    parser.add_argument('--GPU_batchsize', type=str, default=None, help="use GPU when cpu is full")
     # 2023/05/18
     #parser.add_argument('-sl', '--supervised_level', type=float, default=1, help="0=fully unsupervised; 0.5=unsupervised+supervised; 1=fully supervised")
     parser.add_argument('--num_lms', type=int, default=5, help="")
