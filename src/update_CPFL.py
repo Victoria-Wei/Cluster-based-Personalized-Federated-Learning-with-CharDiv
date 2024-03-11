@@ -18,7 +18,7 @@ from tensorboardX import SummaryWriter
 from utils import reorder_col, add_cluster_id, load_model
 import pickle
 import shutil
-from utils import train_split_supervised, train_split_unsupervised
+from utils import train_split_supervised
 
 LOG_DIR = './logs/' #log/'
 
@@ -175,7 +175,7 @@ def get_model_weight(args, source_path, network):                               
     return return_weights, copy.deepcopy(model)
 
 class ASRLocalUpdate_CPFL(object):
-    def __init__(self, args, dataset_supervised, dataset_unsupervised, global_test_dataset, client_id, cluster_id, model_in_path, model_out_path):
+    def __init__(self, args, dataset_supervised, global_test_dataset, client_id, cluster_id, model_in_path, model_out_path):
         self.args = args                                                                        # given configuration
         self.client_id = client_id                                                              # save client id
         self.cluster_id = cluster_id                                                            # save cluster id
@@ -189,126 +189,16 @@ class ASRLocalUpdate_CPFL(object):
         self.device = 'cuda' if args.gpu else 'cpu'                                             # use gpu or cpu
 
         self.client_train_dataset_supervised=None
-        self.client_train_dataset_unsupervised=None
         self.ALL_client_train_dataset_supervised=None
-        self.ALL_client_train_dataset_unsupervised=None
         # if given dataset, get sub-dataset based on client_id & cluster_id
         if dataset_supervised is not None:
             self.client_train_dataset_supervised, _ = train_split_supervised(args, dataset_supervised, client_id, cluster_id)     # data of this client AND this cluster
             self.ALL_client_train_dataset_supervised, _ = train_split_supervised(args, dataset_supervised, client_id, None)     # data of this client       
             print("Da has ", len(self.client_train_dataset_supervised), " samples.")
-        if dataset_unsupervised is not None:
-            self.client_train_dataset_unsupervised, _ = train_split_unsupervised(args, dataset_unsupervised, client_id, cluster_id)    # data of this client AND this cluster
-            self.ALL_client_train_dataset_unsupervised, _ = train_split_unsupervised(args, dataset_unsupervised, client_id, None)      # data of this client          
-            print("Do has ", len(self.client_train_dataset_unsupervised), " samples.")
         self.client_test_dataset = global_test_dataset                                          # global testing set for evaluation
         if cluster_id != None:                                                                  # separate based on cluster_id
             self.client_test_dataset = self.test_split(global_test_dataset, client_id, cluster_id)  
-    """                                                                                            # get subset of testing set (dataset of THIS cluster)
-    def assign_cluster(self, sub_dataset):
-        #sub_dataset = sub_dataset.reset_index(drop=True)
 
-        # load ASR model
-        mask_time_prob = 0                                                                      # change config to avoid code from stopping
-        config = Data2VecAudioConfig.from_pretrained(self.args.pretrain_name, mask_time_prob=mask_time_prob)
-        model = Data2VecAudioForCTC_CPFL.from_pretrained(self.model_in_path, config=config, args=self.args)
-        processor = self.processor
-
-        # load trained K-means model
-        kmeans = pickle.load(open(self.args.Kmeans_model_path, 'rb'))
-
-        # get emb.s ... 1 sample by 1 sample for sub_dataset
-        _, hidden_states_mean = map_to_result(sub_dataset[0], processor, model, 0)
-        for i in range(len(sub_dataset) - 1):
-            _, hidden_states_mean_2 = map_to_result(sub_dataset[i+1], processor, model, i+1)
-            hidden_states_mean.extend(hidden_states_mean_2)                                     # [batch_size, hidden_size] + [batch_size, hidden_size] --> [2*batch_size, hidden_size]
-            print("\r"+ str(i), end="")
-        
-        # get cluster
-        print("len of sub_dataset: ", len(sub_dataset)) # 419
-        print("shape of embs: ", np.shape(np.array(hidden_states_mean))) # [419, 1024]
-        cluster_id_lst = kmeans.predict(hidden_states_mean).tolist()                            # list of cluster_id
-        print("len of predicted outcome: ", len(cluster_id_lst)) # 419
-        # add to dataset
-        #sub_dataset = sub_dataset.add_column("cluster_id", cluster_id_lst)
-        #sub_dataset = sub_dataset.map(lambda x: add_cluster_id(x, cluster_id_lst[x.id]), with_indices=True)
-        #sub_dataset = sub_dataset.map(lambda batch: add_cluster_id(batch, cluster_id_lst), batched=True)
-        sub_dataset = sub_dataset.map(lambda example: add_cluster_id(example, cluster_id_lst.pop(0)))
-        return sub_dataset
-    
-    def train_split_supervised(self, dataset, client_id, cluster_id):
-        # generate sub- training set for given user-ID
-        if client_id == "public":                                                               # get spk_id for public dataset, 54 PAR (50% of all training set)
-            client_spks = ['S086', 'S021', 'S018', 'S156', 'S016', 'S077', 'S027', 'S116', 'S143', 'S082', 'S039', 'S150', 'S004', 'S126', 'S137', 
-            'S097', 'S128', 'S059', 'S096', 'S081', 'S135', 'S094', 'S070', 'S049', 'S080', 'S040', 'S076', 'S093', 'S141', 'S034', 'S056', 'S090', 
-            'S130', 'S092', 'S055', 'S019', 'S154', 'S017', 'S114', 'S100', 'S036', 'S029', 'S127', 'S073', 'S089', 'S051', 'S005', 'S151', 'S003', 
-            'S033', 'S007', 'S084', 'S043', 'S009']                                             # 27 AD + 27 HC
-        elif client_id == "public2":                                                            # get spk_id for public dataset, 54 PAR (50% of all training set) from clients
-            client_spks = ['S058', 'S030', 'S064', 'S104', 'S048', 'S118', 'S122', 'S001', 'S087', 'S013', 'S025', 'S083', 'S067', 'S068', 'S111', 
-            'S028', 'S015', 'S108', 'S095', 'S002', 'S072', 'S020', 'S148', 'S144', 'S110', 'S124', 'S129', 'S071', 'S136', 'S140', 'S145', 'S032', 
-            'S101', 'S103', 'S139', 'S038', 'S153', 'S035', 'S011', 'S132', 'S006', 'S149', 'S041', 'S079', 'S107', 'S063', 'S061', 'S125', 'S062', 
-            'S012', 'S138', 'S024', 'S052', 'S142']                                             # 27 AD + 27 HC
-        elif client_id == 0:                                                                    # 10 PAR w/ 10 AD
-            client_spks = ['S139', 'S125', 'S145', 'S149', 'S138', 'S144', 'S101', 'S136', 'S148', 'S108']
-        elif client_id == 1:                                                                    # 12 PAR w/ 9 AD
-            client_spks = ['S030', 'S124', 'S013', 'S111', 'S140', 'S095', 'S104', 'S006', 'S087', 'S153', 'S107', 'S142']
-        elif client_id == 2:                                                                    # 10 PAR w/ 5 AD
-            client_spks = ['S110', 'S028', 'S083', 'S038', 'S079', 'S067', 'S129', 'S052', 'S024', 'S132']
-        elif client_id == 3:                                                                    # 12 PAR w/ 3 AD
-            client_spks = ['S071', 'S012', 'S032', 'S103', 'S122', 'S118', 'S020', 'S015', 'S002', 'S041', 'S062', 'S072']
-        elif client_id == 4:                                                                    # 10 PAR w/ 10 HC
-            client_spks = ['S011', 'S025', 'S058', 'S001', 'S048', 'S064', 'S068', 'S063', 'S061', 'S035']                                    
-        else:
-            print("Train with whole dataset!!")
-            return dataset
-
-        print("Generating client training set for client ", str(client_id), "...")
-        if cluster_id == None: # 不分群
-            client_train_dataset = dataset.filter(lambda example: example["path"].startswith(tuple(client_spks)))
-        else:
-            print("Generating client training set for cluster ", str(cluster_id), "...")
-            client_train_dataset = dataset.filter(lambda example: example["path"].startswith(tuple(client_spks)) and example['cluster_id'] == cluster_id)
-        
-        return client_train_dataset
-    
-    def train_split_unsupervised(self, dataset, client_id, cluster_id):
-        # generate sub- training set for given user-ID
-        if client_id == 0:                                                                      # 37 PAR w/ 37 AD
-            client_spks = ['adrso045', 'adrso068', 'adrso247', 'adrso142', 'adrso059', 'adrso216', 'adrso246', 'adrso197', 'adrso046', 'adrso250', 
-                           'adrso092', 'adrso234', 'adrso122', 'adrso187', 'adrso054', 'adrso244', 'adrso130', 'adrso189', 'adrso053', 'adrso125', 
-                           'adrso071', 'adrso236', 'adrso116', 'adrso063', 'adrso220', 'adrso237', 'adrso198', 'adrso106', 'adrso109', 'adrso188', 
-                           'adrso192', 'adrso077', 'adrso025', 'adrso202', 'adrso232', 'adrso090', 'adrso215']
-        elif client_id == 1:                                                                    # 36 PAR w/ 27 AD
-            client_spks = ['adrso228', 'adrso126', 'adrso263', 'adrso078', 'adrso249', 'adrso110', 'adrso224', 'adrso039', 'adrso075', 'adrso267', 
-                           'adrso112', 'adrso047', 'adrso270', 'adrso245', 'adrso233', 'adrso024', 'adrso316', 'adrso190', 'adrso014', 'adrso123', 
-                           'adrso144', 'adrso032', 'adrso289', 'adrso093', 'adrso206', 'adrso056', 'adrso027', 'adrso060', 'adrso151', 'adrso072', 
-                           'adrso310', 'adrso223', 'adrso033', 'adrso260', 'adrso253', 'adrso128']
-        elif client_id == 2:                                                                    # 32 PAR w/ 16 AD
-            client_spks = ['adrso160', 'adrso028', 'adrso098', 'adrso218', 'adrso298', 'adrso222', 'adrso031', 'adrso200', 'adrso141', 'adrso248', 
-                           'adrso265', 'adrso229', 'adrso177', 'adrso055', 'adrso015', 'adrso157', 'adrso278', 'adrso007', 'adrso016', 'adrso209', 
-                           'adrso286', 'adrso154', 'adrso164', 'adrso259', 'adrso277', 'adrso134', 'adrso212', 'adrso172', 'adrso008', 'adrso089', 
-                           'adrso074', 'adrso205']
-        elif client_id == 3:                                                                    # 28 PAR w/ 7 AD
-            client_spks = ['adrso291', 'adrso035', 'adrso169', 'adrso049', 'adrso183', 'adrso257', 'adrso070', 'adrso153', 'adrso211', 'adrso302', 
-                           'adrso178', 'adrso180', 'adrso036', 'adrso268', 'adrso043', 'adrso138', 'adrso281', 'adrso005', 'adrso266', 'adrso309', 
-                           'adrso148', 'adrso017', 'adrso186', 'adrso274', 'adrso002', 'adrso283', 'adrso299', 'adrso003']
-        elif client_id == 4:                                                                    # 28 PAR w/ 28 HC
-            client_spks = ['adrso280', 'adrso173', 'adrso156', 'adrso273', 'adrso162', 'adrso307', 'adrso276', 'adrso300', 'adrso292', 'adrso264', 
-                           'adrso158', 'adrso285', 'adrso262', 'adrso010', 'adrso159', 'adrso308', 'adrso165', 'adrso182', 'adrso170', 'adrso161', 
-                           'adrso315', 'adrso261', 'adrso167', 'adrso152', 'adrso296', 'adrso312', 'adrso012', 'adrso168']
-        else:
-            print("Train with whole dataset!!")
-            return dataset
-        
-        print("Generating client training set for client ", str(client_id), "...")
-        if cluster_id == None: # 不分群
-            client_train_dataset = dataset.filter(lambda example: example["path"].startswith(tuple(client_spks)))
-        else:
-            print("Generating client training set for cluster ", str(cluster_id), "...")
-            client_train_dataset = dataset.filter(lambda example: example["path"].startswith(tuple(client_spks)) and example['cluster_id'] == cluster_id)
-        
-        return client_train_dataset
-    """
     def test_split(self, dataset, client_id, cluster_id):
         # generate sub- testing set for given user-ID
         client_test_dataset = dataset
@@ -545,133 +435,7 @@ class ASRLocalUpdate_CPFL(object):
         else:
             print("other training_type, such as type ", self.args.training_type, " not implemented yet")
             aaa=ccc
-        """
-        # other training_type not implemented yet
-        elif self.args.training_type == 2:                                                      # semi-supervised
-            save_path = self.model_out_path + "_client" + str(self.client_id) + "_round" + str(global_round)
-            if self.cluster_id != None:
-                save_path += "_cluster" + str(self.cluster_id) 
-            save_path += "_Training" + "AddressoWhisper"
-            if self.args.CPFL:
-                dataset = self.ALL_client_train_dataset_unsupervised                              # train with all client data
-            else:
-                dataset = self.client_train_dataset_unsupervised
-            return_weights, _ = self.model_train(model, dataset, save_path, num_train_epochs=self.args.local_ep)
-            num_training_samples = len(self.client_train_dataset_unsupervised)
-            # remove previous model if exists
-            if global_round > 0:
-                save_path = self.model_out_path + "_client" + str(self.client_id) + "_round" + str(global_round - 1)
-                if self.cluster_id != None:
-                    save_path += "_cluster" + str(self.cluster_id)
-                save_path += "_Training" + "AddressoWhisper"
-                shutil.rmtree(save_path)
-        elif self.args.training_type == 3:                                                      # semi then supervised
-            # semi-supervised
-            save_path = self.model_out_path + "_client" + str(self.client_id) + "_round" + str(global_round)
-            if self.cluster_id != None:
-                save_path += "_cluster" + str(self.cluster_id)
-            save_path += "_Training" + "AddressoWhisper"
-            if self.args.CPFL:
-                dataset = self.ALL_client_train_dataset_unsupervised                              # train with all client data
-            else:
-                dataset = self.client_train_dataset_unsupervised
-            _, model = self.model_train(model, dataset, save_path, num_train_epochs=int(self.args.local_ep / 2))
-            shutil.rmtree(save_path)
-            # supervised
-            save_path = self.model_out_path + "_client" + str(self.client_id) + "_round" + str(global_round)
-            if self.cluster_id != None:
-                save_path += "_cluster" + str(self.cluster_id)
-            save_path += "_Training" + "Address"
-            if self.args.CPFL:
-                dataset = self.ALL_client_train_dataset_supervised                              # train with all client data
-            else:
-                dataset = self.client_train_dataset_supervised
-            return_weights, _ = self.model_train(model, dataset, save_path, num_train_epochs=int(self.args.local_ep / 2))
-            num_training_samples = len(self.client_train_dataset_supervised) + len(self.client_train_dataset_unsupervised)
 
-            # remove previous model if exists
-            if global_round > 0:
-                save_path = self.model_out_path + "_client" + str(self.client_id) + "_round" + str(global_round - 1)
-                if self.cluster_id != None:
-                    save_path += "_cluster" + str(self.cluster_id)
-                save_path += "_Training" + "Address"
-                shutil.rmtree(save_path)
-        elif self.args.training_type == 4:                                                      # supervised then semi
-            # supervised
-            save_path = self.model_out_path + "_client" + str(self.client_id) + "_round" + str(global_round)
-            if self.cluster_id != None:
-                save_path += "_cluster" + str(self.cluster_id)
-            save_path += "_Training" + "Address"
-            if self.args.CPFL:
-                dataset = self.ALL_client_train_dataset_supervised                              # train with all client data
-            else:
-                dataset = self.client_train_dataset_supervised
-            _, model = self.model_train(model, dataset, save_path, num_train_epochs=int(self.args.local_ep / 2))
-            shutil.rmtree(save_path)
-            # semi-supervised
-            save_path = self.model_out_path + "_client" + str(self.client_id) + "_round" + str(global_round)
-            if self.cluster_id != None:
-                save_path += "_cluster" + str(self.cluster_id)
-            save_path += "_Training" + "AddressoWhisper"
-            if self.args.CPFL:
-                dataset = self.ALL_client_train_dataset_unsupervised                              # train with all client data
-            else:
-                dataset = self.client_train_dataset_unsupervised
-            return_weights, _ = self.model_train(model, dataset, save_path, num_train_epochs=int(self.args.local_ep / 2))
-            num_training_samples = len(self.client_train_dataset_supervised) + len(self.client_train_dataset_unsupervised)
-            # remove previous model if exists
-            if global_round > 0:
-                save_path = self.model_out_path + "_client" + str(self.client_id) + "_round" + str(global_round - 1)
-                if self.cluster_id != None:
-                    save_path += "_cluster" + str(self.cluster_id)
-                save_path += "_Training" + "AddressoWhisper"
-                shutil.rmtree(save_path)
-        else:                                                                                   # all together
-            if self.args.training_type != 5:
-                print("Training_type should be 1-5, which means supervised(1) / semi-supervised(2) / semi then supervised(3) / supervised then semi (4) / all together(5)")
-                print("Current training_type: ", self.args.training_type, ". Will begin training w/ 'all together' instead.")
-            # combine dataset
-            supervised_cols = self.client_train_dataset_supervised.column_names
-            unsupervised_cols = self.client_train_dataset_unsupervised.column_names
-
-            if supervised_cols != unsupervised_cols:                                            # if col in different order, re-order
-                train_dataset_unsupervised = reorder_col(self.client_train_dataset_supervised, self.client_train_dataset_unsupervised)
-            else:
-                train_dataset_unsupervised = self.client_train_dataset_unsupervised
-            # 有可能有0 samples的狀況
-            print("supervised dataset of client ", str(self.client_id) , " has ", len(self.client_train_dataset_supervised), "sample(s)")
-            print("unsupervised dataset of client ", str(self.client_id) , " has ", len(train_dataset_unsupervised), "sample(s)")
-
-            dataset_combine = concatenate_datasets([self.client_train_dataset_supervised, train_dataset_unsupervised])
-            save_path = self.model_out_path + "_client" + str(self.client_id) + "_round" + str(global_round)
-            if self.cluster_id != None:
-                save_path += "_cluster" + str(self.cluster_id)
-            save_path += "_Training" + "AddressoWhisperandAddress"
-
-            if self.args.CPFL:                          
-                # combine dataset
-                supervised_cols = self.ALL_client_train_dataset_supervised.column_names
-                unsupervised_cols = self.ALL_client_train_dataset_unsupervised.column_names
-
-                if supervised_cols != unsupervised_cols:                                            # if col in different order, re-order
-                    train_dataset_unsupervised = reorder_col(self.ALL_client_train_dataset_supervised, self.ALL_client_train_dataset_unsupervised)
-                else:
-                    train_dataset_unsupervised = self.ALL_client_train_dataset_unsupervised
-
-                dataset = concatenate_datasets([self.ALL_client_train_dataset_supervised, train_dataset_unsupervised])    # train with all client data            
-            else:
-                dataset = dataset_combine
-                
-            return_weights, _ = self.model_train(model, dataset, save_path, num_train_epochs=self.args.local_ep)
-            num_training_samples = len(dataset_combine)
-            # remove previous model if exists
-            if global_round > 0:
-                save_path = self.model_out_path + "_client" + str(self.client_id) + "_round" + str(global_round - 1)
-                if self.cluster_id != None:
-                    save_path += "_cluster" + str(self.cluster_id)
-                save_path += "_Training" + "AddressoWhisperandAddress"
-                shutil.rmtree(save_path)
-        """
         return return_weights, num_training_samples                                             # return weight
 
     def extract_embs(self, TEST):                                                               # extract emb. using model in self.model_in_path
@@ -724,22 +488,6 @@ class ASRLocalUpdate_CPFL(object):
                 entropy_super = entropy
                 vocab_ratio_rank_super = vocab_ratio_rank
                 encoder_attention_1D_super = encoder_attention_1D
-            #print("self.client_train_dataset_unsupervised: ", self.client_train_dataset_unsupervised)
-            if (self.client_train_dataset_unsupervised != None) and (len(self.client_train_dataset_unsupervised) != 0):                                  # if given unsupervised dataset
-                _, hidden_states_mean, loss, entropy, vocab_ratio_rank, encoder_attention_1D = map_to_result(self.client_train_dataset_unsupervised[0], processor, model, 0) 
-                for i in range(len(self.client_train_dataset_unsupervised) - 1):
-                    _, hidden_states_mean_2, loss2, entropy2, vocab_ratio_rank2, encoder_attention_1D2 = map_to_result(self.client_train_dataset_unsupervised[i+1], processor, model, i+1)
-                    hidden_states_mean.extend(hidden_states_mean_2)                             # [batch_size, hidden_size] + [batch_size, hidden_size] --> [2*batch_size, hidden_size]
-                    loss.extend(loss2)                                                          # [batch_size, 1] + [batch_size, 1] --> [2*batch_size, 1]
-                    entropy.extend(entropy2)
-                    vocab_ratio_rank.extend(vocab_ratio_rank2)
-                    encoder_attention_1D.extend(encoder_attention_1D2)
-                    print("\r"+ str(i), end="")
-                hidden_states_mean_semi = hidden_states_mean
-                loss_semi = loss
-                entropy_semi = entropy
-                vocab_ratio_rank_semi = vocab_ratio_rank
-                encoder_attention_1D_semi = encoder_attention_1D
             print("Training data Done")
 
             if (hidden_states_mean_super != None) and (hidden_states_mean_semi != None):
