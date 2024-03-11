@@ -10,7 +10,7 @@ from typing import Dict
 import numpy as np
 import os
 import pandas as pd
-from models import DataCollatorCTCWithPadding, Data2VecAudioForCTC_CBFL
+from models import DataCollatorCTCWithPadding, Data2VecAudioForCTC_CPFL
 from datasets import concatenate_datasets
 import copy
 from transformers import Data2VecAudioConfig, Wav2Vec2Processor
@@ -22,8 +22,8 @@ from utils import train_split_supervised, train_split_unsupervised
 
 LOG_DIR = './logs/' #log/'
 
-DACS_codeRoot = os.environ.get('DACS_codeRoot')
-DACS_dataRoot = os.environ.get('DACS_dataRoot')
+CPFL_codeRoot = os.environ.get('CPFL_codeRoot')
+CPFL_dataRoot = os.environ.get('CPFL_dataRoot')
 
 from datasets import load_metric
 wer_metric = load_metric("wer")
@@ -149,7 +149,7 @@ def update_network_weight(args, source_path, target_weight, network):           
     mask_time_prob = 0                                                                          # change config to avoid training stopping
     config = Data2VecAudioConfig.from_pretrained(args.pretrain_name, mask_time_prob=mask_time_prob)
                                                                                                 # use pre-trained config
-    model = Data2VecAudioForCTC_CBFL.from_pretrained(args.pretrain_name, config=config, args=args)
+    model = Data2VecAudioForCTC_CPFL.from_pretrained(args.pretrain_name, config=config, args=args)
                                                                                                 # use pre-trained model
     model.config.ctc_zero_infinity = True                                                       # to avoid inf values
 
@@ -165,7 +165,7 @@ def get_model_weight(args, source_path, network):                               
     mask_time_prob = 0                                                                          # change config to avoid training stopping
     config = Data2VecAudioConfig.from_pretrained(args.pretrain_name, mask_time_prob=mask_time_prob)
                                                                                                 # use pre-trained config
-    #model = Data2VecAudioForCTC_CBFL.from_pretrained(source_path, config=config, args=args)     # load from source
+    #model = Data2VecAudioForCTC_CPFL.from_pretrained(source_path, config=config, args=args)     # load from source
     model = load_model(args, source_path, config)
     model.config.ctc_zero_infinity = True                                                       # to avoid inf values
 
@@ -174,7 +174,7 @@ def get_model_weight(args, source_path, network):                               
     
     return return_weights, copy.deepcopy(model)
 
-class ASRLocalUpdate_CBFL(object):
+class ASRLocalUpdate_CPFL(object):
     def __init__(self, args, dataset_supervised, dataset_unsupervised, global_test_dataset, client_id, cluster_id, model_in_path, model_out_path):
         self.args = args                                                                        # given configuration
         self.client_id = client_id                                                              # save client id
@@ -211,7 +211,7 @@ class ASRLocalUpdate_CBFL(object):
         # load ASR model
         mask_time_prob = 0                                                                      # change config to avoid code from stopping
         config = Data2VecAudioConfig.from_pretrained(self.args.pretrain_name, mask_time_prob=mask_time_prob)
-        model = Data2VecAudioForCTC_CBFL.from_pretrained(self.model_in_path, config=config, args=self.args)
+        model = Data2VecAudioForCTC_CPFL.from_pretrained(self.model_in_path, config=config, args=self.args)
         processor = self.processor
 
         # load trained K-means model
@@ -436,7 +436,7 @@ class ASRLocalUpdate_CBFL(object):
                 mask_time_prob = 0                                                                  # change config to avoid training stopping
                 config = Data2VecAudioConfig.from_pretrained(self.args.pretrain_name, mask_time_prob=mask_time_prob)
                                                                                                     # use pre-trained config
-                #model = Data2VecAudioForCTC_CBFL.from_pretrained(self.model_in_path, config=config, args=self.args)
+                #model = Data2VecAudioForCTC_CPFL.from_pretrained(self.model_in_path, config=config, args=self.args)
                 model = load_model(self.args, self.model_in_path[:-7], config)
                 model.config.ctc_zero_infinity = True                                               # to avoid inf values
             else:                                                                                   # update train model using given weight
@@ -465,7 +465,7 @@ class ASRLocalUpdate_CBFL(object):
                 mask_time_prob = 0                                                              # change config to avoid training stopping
                 config = Data2VecAudioConfig.from_pretrained(self.args.pretrain_name, mask_time_prob=mask_time_prob)
                                                                                                 # use pre-trained config
-                #model = Data2VecAudioForCTC_CBFL.from_pretrained(self.model_in_path, config=config, args=self.args)
+                #model = Data2VecAudioForCTC_CPFL.from_pretrained(self.model_in_path, config=config, args=self.args)
                 model_mutual = load_model(self.args, self.model_in_path[:-7], config)
                 model_mutual.config.ctc_zero_infinity = True                                    # to avoid inf values
             else:                                                                               # update train model using given weight
@@ -474,7 +474,7 @@ class ASRLocalUpdate_CBFL(object):
         
         if self.client_id == "public":                                                          # train using public dataset
             save_path = self.model_out_path + "_global"
-            if self.args.CBFL:
+            if self.args.CPFL:
                 dataset = self.ALL_client_train_dataset_supervised                              # train with all client data
             else:
                 dataset = self.client_train_dataset_supervised
@@ -488,8 +488,8 @@ class ASRLocalUpdate_CBFL(object):
                 save_path += "_cluster" + str(self.cluster_id)
             save_path += "_Training" + "Address"
 
-            # CBFL use all training data from all cluster to train
-            if self.args.CBFL:
+            # CPFL use all training data from all cluster to train
+            if self.args.CPFL:
                 dataset = self.ALL_client_train_dataset_supervised                              # train with all client data
             else:
                 dataset = self.client_train_dataset_supervised
@@ -552,7 +552,7 @@ class ASRLocalUpdate_CBFL(object):
             if self.cluster_id != None:
                 save_path += "_cluster" + str(self.cluster_id) 
             save_path += "_Training" + "AddressoWhisper"
-            if self.args.CBFL:
+            if self.args.CPFL:
                 dataset = self.ALL_client_train_dataset_unsupervised                              # train with all client data
             else:
                 dataset = self.client_train_dataset_unsupervised
@@ -571,7 +571,7 @@ class ASRLocalUpdate_CBFL(object):
             if self.cluster_id != None:
                 save_path += "_cluster" + str(self.cluster_id)
             save_path += "_Training" + "AddressoWhisper"
-            if self.args.CBFL:
+            if self.args.CPFL:
                 dataset = self.ALL_client_train_dataset_unsupervised                              # train with all client data
             else:
                 dataset = self.client_train_dataset_unsupervised
@@ -582,7 +582,7 @@ class ASRLocalUpdate_CBFL(object):
             if self.cluster_id != None:
                 save_path += "_cluster" + str(self.cluster_id)
             save_path += "_Training" + "Address"
-            if self.args.CBFL:
+            if self.args.CPFL:
                 dataset = self.ALL_client_train_dataset_supervised                              # train with all client data
             else:
                 dataset = self.client_train_dataset_supervised
@@ -602,7 +602,7 @@ class ASRLocalUpdate_CBFL(object):
             if self.cluster_id != None:
                 save_path += "_cluster" + str(self.cluster_id)
             save_path += "_Training" + "Address"
-            if self.args.CBFL:
+            if self.args.CPFL:
                 dataset = self.ALL_client_train_dataset_supervised                              # train with all client data
             else:
                 dataset = self.client_train_dataset_supervised
@@ -613,7 +613,7 @@ class ASRLocalUpdate_CBFL(object):
             if self.cluster_id != None:
                 save_path += "_cluster" + str(self.cluster_id)
             save_path += "_Training" + "AddressoWhisper"
-            if self.args.CBFL:
+            if self.args.CPFL:
                 dataset = self.ALL_client_train_dataset_unsupervised                              # train with all client data
             else:
                 dataset = self.client_train_dataset_unsupervised
@@ -648,7 +648,7 @@ class ASRLocalUpdate_CBFL(object):
                 save_path += "_cluster" + str(self.cluster_id)
             save_path += "_Training" + "AddressoWhisperandAddress"
 
-            if self.args.CBFL:                          
+            if self.args.CPFL:                          
                 # combine dataset
                 supervised_cols = self.ALL_client_train_dataset_supervised.column_names
                 unsupervised_cols = self.ALL_client_train_dataset_unsupervised.column_names
