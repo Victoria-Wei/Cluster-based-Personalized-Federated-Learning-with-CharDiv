@@ -1,7 +1,7 @@
 from update_CBFL import ASRLocalUpdate_CBFL
 import torch
 
-def client_train(args, model_in_path_root, model_out_path, train_dataset_supervised, train_dataset_unsupervised, 
+def client_train(args, model_in_path_root, model_out_path, train_dataset_supervised, 
                  test_dataset, idx, epoch, cluster_id, global_weights=None):          # train function for each client, train from model in model_in_path 
                                                                                       #                                                                   + "_global/final/"
                                                                                       # or model in last round
@@ -29,8 +29,8 @@ def client_train(args, model_in_path_root, model_out_path, train_dataset_supervi
                 model_in_path += "_cluster" + str(cluster_id) 
             model_in_path += "_Training" + "AddressoWhisperandAddress/final/"
     
-    local_model = ASRLocalUpdate_CBFL(args=args, dataset_supervised=train_dataset_supervised, dataset_unsupervised=train_dataset_unsupervised,
-                                 global_test_dataset=test_dataset, client_id=idx, cluster_id=cluster_id, model_in_path=model_in_path, model_out_path=model_out_path)
+    local_model = ASRLocalUpdate_CBFL(args=args, dataset_supervised=train_dataset_supervised, global_test_dataset=test_dataset, client_id=idx, 
+                                      cluster_id=cluster_id, model_in_path=model_in_path, model_out_path=model_out_path)
                                                                                       # initial dataset of current client
 
     w, num_training_samples = local_model.update_weights(global_weights=global_weights, global_round=epoch) 
@@ -48,11 +48,11 @@ def centralized_training(args, model_in_path, model_out_path, train_dataset, tes
     local_model.update_weights(global_weights=None, global_round=epoch)               # from model_in_path to train
 
 
-def client_getEmb(args, model_in_path, train_dataset_supervised, train_dataset_unsupervised, test_dataset, idx, cluster_id,
+def client_getEmb(args, model_in_path, train_dataset_supervised, test_dataset, idx, cluster_id,
                   TEST):                                                    # function to get emb. for each client, from model in model_in_path +"/final/"
     torch.set_num_threads(1)
-    local_model = ASRLocalUpdate_CBFL(args=args, dataset_supervised=train_dataset_supervised, dataset_unsupervised=train_dataset_unsupervised,
-                                 global_test_dataset=test_dataset, client_id=idx, cluster_id=cluster_id, model_in_path=model_in_path, model_out_path=None)
+    local_model = ASRLocalUpdate_CBFL(args=args, dataset_supervised=train_dataset_supervised, global_test_dataset=test_dataset, client_id=idx, 
+                                      cluster_id=cluster_id, model_in_path=model_in_path, model_out_path=None)
                                                                                       # initial dataset of current client & current cluster
     if TEST:
         df, hidden_states_mean, loss, entropy, vocab_ratio_rank = local_model.extract_embs(TEST)
