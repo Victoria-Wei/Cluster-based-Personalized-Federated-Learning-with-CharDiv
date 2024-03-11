@@ -54,7 +54,7 @@ def FL_training_clusters_loop(args, epoch, model_in_path_root, model_out_path, t
     return global_weights_lst                                                               # weight per cluster
     
 # train 1 round for all clusters at once
-def CBFL_training_clusters(args, model_in_path_root, model_out_path, train_dataset_supervised, test_dataset, Nth_Kmeans_update=None, init_weights_lst=None):
+def CPFL_training_clusters(args, model_in_path_root, model_out_path, train_dataset_supervised, test_dataset, Nth_Kmeans_update=None, init_weights_lst=None):
     if Nth_Kmeans_update == None:                                                           # no need to re-cluster
         epochs = args.epochs                                                                # perform training at once
     else:
@@ -72,16 +72,16 @@ def CBFL_training_clusters(args, model_in_path_root, model_out_path, train_datas
         for j in range(args.num_lms):                                                       # for all cluster
             # aggregate model and save results
             global_weights = global_weights_lst[j]
-            folder_to_save = args.model_out_path+"_cluster" + str(j) + "_CBFLASR_global_round" + str(epoch)
+            folder_to_save = args.model_out_path+"_cluster" + str(j) + "_CPFLASR_global_round" + str(epoch)
             model = update_network_weight(args=args, source_path=args.model_out_path+"_FLASR_global/final/", target_weight=global_weights, network="ASR")
                                                                                             # update ASR weight
             model.save_pretrained(folder_to_save + "/final")
 
         model_in_path = args.model_in_path                                                  # keep model_in_path so that we can re-assign it later
         evaluateASR(args, epoch, test_dataset, train_dataset_supervised)                    # evaluate current models
-        print(args.model_out_path+"#_CBFLASR_global_round" + str(epoch) + " evaluated.")
+        print(args.model_out_path+"#_CPFLASR_global_round" + str(epoch) + " evaluated.")
         for j in range(args.num_lms):
-            shutil.rmtree(args.model_out_path+"_cluster" + str(j) + "_CBFLASR_global_round" + str(epoch))
+            shutil.rmtree(args.model_out_path+"_cluster" + str(j) + "_CPFLASR_global_round" + str(epoch))
                                                                                             # remove aggregated models
         # get ready for the next round
         args.model_in_path = model_in_path
@@ -230,13 +230,13 @@ def CPFL_TrainASR(args, train_dataset_supervised, test_dataset):
             Nth_Kmeans_update = None
         else:
             Nth_Kmeans_update = i
-        global_weights_lst = CBFL_training_clusters(args=args, model_in_path_root=args.model_in_path+"_FLASR", model_out_path=args.model_out_path,
+        global_weights_lst = CPFL_training_clusters(args=args, model_in_path_root=args.model_in_path+"_FLASR", model_out_path=args.model_out_path,
                                     train_dataset_supervised=train_dataset_supervised, test_dataset=test_dataset, Nth_Kmeans_update=Nth_Kmeans_update, 
                                                     init_weights_lst=global_weights_lst)
         # update global model for each cluster
         for j in range(args.num_lms):
             global_weights = global_weights_lst[j]                                          # get global weight for cluster j
-            folder_to_save = args.model_out_path+"_cluster" + str(j) + "_CBFLASR_global_round" + str(int((i+1)*args.N_Kmeans_update - 1))
+            folder_to_save = args.model_out_path+"_cluster" + str(j) + "_CPFLASR_global_round" + str(int((i+1)*args.N_Kmeans_update - 1))
             model = update_network_weight(args=args, source_path=args.model_out_path+"_FLASR_global/final/", target_weight=global_weights, network="ASR")
                                                                                             # update weights
             model.save_pretrained(folder_to_save + "/final")
