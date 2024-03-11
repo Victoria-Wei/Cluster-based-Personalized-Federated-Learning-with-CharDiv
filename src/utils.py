@@ -687,53 +687,6 @@ def train_split_supervised(args, dataset, client_id, cluster_id):
         return train_dataset_client, dev_dataset_client
     # default: 分完群後client train就全部拿來訓練，沒有client test
     return client_train_dataset, None 
-
-def train_split_unsupervised(args, dataset, client_id, cluster_id):
-    # generate sub- training set for given user-ID
-    if client_id == 0:                                                                      # 37 PAR w/ 37 AD
-        client_spks = ['adrso045', 'adrso068', 'adrso247', 'adrso142', 'adrso059', 'adrso216', 'adrso246', 'adrso197', 'adrso046', 'adrso250', 
-                        'adrso092', 'adrso234', 'adrso122', 'adrso187', 'adrso054', 'adrso244', 'adrso130', 'adrso189', 'adrso053', 'adrso125', 
-                        'adrso071', 'adrso236', 'adrso116', 'adrso063', 'adrso220', 'adrso237', 'adrso198', 'adrso106', 'adrso109', 'adrso188', 
-                        'adrso192', 'adrso077', 'adrso025', 'adrso202', 'adrso232', 'adrso090', 'adrso215']
-    elif client_id == 1:                                                                    # 36 PAR w/ 27 AD
-        client_spks = ['adrso228', 'adrso126', 'adrso263', 'adrso078', 'adrso249', 'adrso110', 'adrso224', 'adrso039', 'adrso075', 'adrso267', 
-                        'adrso112', 'adrso047', 'adrso270', 'adrso245', 'adrso233', 'adrso024', 'adrso316', 'adrso190', 'adrso014', 'adrso123', 
-                        'adrso144', 'adrso032', 'adrso289', 'adrso093', 'adrso206', 'adrso056', 'adrso027', 'adrso060', 'adrso151', 'adrso072', 
-                        'adrso310', 'adrso223', 'adrso033', 'adrso260', 'adrso253', 'adrso128']
-    elif client_id == 2:                                                                    # 32 PAR w/ 16 AD
-        client_spks = ['adrso160', 'adrso028', 'adrso098', 'adrso218', 'adrso298', 'adrso222', 'adrso031', 'adrso200', 'adrso141', 'adrso248', 
-                        'adrso265', 'adrso229', 'adrso177', 'adrso055', 'adrso015', 'adrso157', 'adrso278', 'adrso007', 'adrso016', 'adrso209', 
-                        'adrso286', 'adrso154', 'adrso164', 'adrso259', 'adrso277', 'adrso134', 'adrso212', 'adrso172', 'adrso008', 'adrso089', 
-                        'adrso074', 'adrso205']
-    elif client_id == 3:                                                                    # 28 PAR w/ 7 AD
-        client_spks = ['adrso291', 'adrso035', 'adrso169', 'adrso049', 'adrso183', 'adrso257', 'adrso070', 'adrso153', 'adrso211', 'adrso302', 
-                        'adrso178', 'adrso180', 'adrso036', 'adrso268', 'adrso043', 'adrso138', 'adrso281', 'adrso005', 'adrso266', 'adrso309', 
-                        'adrso148', 'adrso017', 'adrso186', 'adrso274', 'adrso002', 'adrso283', 'adrso299', 'adrso003']
-    elif client_id == 4:                                                                    # 28 PAR w/ 28 HC
-        client_spks = ['adrso280', 'adrso173', 'adrso156', 'adrso273', 'adrso162', 'adrso307', 'adrso276', 'adrso300', 'adrso292', 'adrso264', 
-                        'adrso158', 'adrso285', 'adrso262', 'adrso010', 'adrso159', 'adrso308', 'adrso165', 'adrso182', 'adrso170', 'adrso161', 
-                        'adrso315', 'adrso261', 'adrso167', 'adrso152', 'adrso296', 'adrso312', 'adrso012', 'adrso168']
-    else:
-        print("Train with whole dataset!!")
-        return dataset
-    
-    print("Generating client training set for client ", str(client_id), "...")
-    if cluster_id == None:                                                                  # 不分群
-        client_train_dataset = dataset.filter(lambda example: example["path"].startswith(tuple(client_spks)))
-    else:                                                                                   # 分群，filter 1次到位
-        print("Generating client training set for cluster ", str(cluster_id), "...")
-        client_train_dataset = dataset.filter(lambda example: example["path"].startswith(tuple(client_spks)) and example['cluster_id'] == cluster_id)
-
-    # Mode 1: 分完群後client train就全部拿來訓練，沒有client test
-    if args.eval_mode == 1:                             
-        return client_train_dataset, None
-    # Mode 2: 分完群後client train一部分切出來當client test，按句子切
-    # 對unsupervised data來說，沒有ground truth無法做eval
-    #elif args.eval_mode == 2: 
-    #    train_dataset_client, test_dataset_client = split_train_test_client(client_spks, client_train_dataset)
-    #    return train_dataset_client, test_dataset_client
-    # default: 分完群後client train就全部拿來訓練，沒有client test
-    return client_train_dataset, None 
     
 def evaluateASR(args, global_round, global_test_dataset, train_dataset_supervised=None):
     if args.chosen_clients == True:                                                                 # train only the chosen clients
