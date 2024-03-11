@@ -3,17 +3,12 @@
 # Python version: 3.6
 
 import os
-import copy
 import time
 import numpy as np
 from tqdm import tqdm
 import multiprocessing
 from transformers import Wav2Vec2Processor
 import pickle
-import whisper
-import pandas as pd
-import json
-from datasets import Dataset
 from sklearn.cluster import KMeans
 from transformers import Data2VecAudioConfig
 from collections import Counter
