@@ -17,11 +17,11 @@ import argparse
 import re
 from datasets import * 
 from transformers import Data2VecAudioConfig
-from models import Data2VecAudioForCTC_CBFL
+from models import Data2VecAudioForCTC_CPFL
 from jiwer import wer
 
-DACS_codeRoot = os.environ.get('DACS_codeRoot')
-DACS_dataRoot = os.environ.get('DACS_dataRoot')
+CPFL_codeRoot = os.environ.get('CPFL_codeRoot')
+CPFL_dataRoot = os.environ.get('CPFL_dataRoot')
 
 
 
@@ -80,9 +80,9 @@ def csv2dataset(audio_path = '{}/clips/'.format(args.root_dir),
     my_dict["dementia_labels"] = []
 
     if with_transcript:                                                     # ADReSS
-        spk2label=np.load("/mnt/Internal/FedASR/weitung/HuggingFace/Pretrain/dataset/test_dic.npy", allow_pickle=True).tolist()
+        spk2label=np.load(path2_ADReSS_dict, allow_pickle=True).tolist()
     else:                                                                   # ADReSSo
-        spk2label=np.load("/mnt/Internal/FedASR/Data/ADReSSo21/diagnosis/spk2label_train.npy", allow_pickle=True).tolist()
+        spk2label=np.load(path2_ADReSSo_dict, allow_pickle=True).tolist()
 
     i = 1
     for file_path in dataset['path']:                                       # for all files
@@ -164,15 +164,15 @@ def get_raw_dataset(args):                                                  # re
             print("Train without ADReSS dataset.")
         else:
             # load and map train data
-            train_data = csv2dataset(csv_path = f"{DACS_dataRoot}/mid_csv/train.csv", dataset_path=dataset_path)
+            train_data = csv2dataset(csv_path = f"{CPFL_dataRoot}/mid_csv/train.csv", dataset_path=dataset_path)
             #train_data = train_data.map(prepare_dataset, num_proc=10)
             train_dataset = train_data.map(lambda x: prepare_dataset(x, processor=processor), num_proc=10)
         # load and map dev data
-        #dev_data = csv2dataset(path = f"{DACS_dataRoot}/mid_csv/dev.csv")
+        #dev_data = csv2dataset(path = f"{CPFL_dataRoot}/mid_csv/dev.csv")
         #dev_data = dev_data.map(prepare_dataset, num_proc=10)
 
         # load and map test data
-        test_data = csv2dataset(csv_path = f"{DACS_dataRoot}/mid_csv/test.csv", dataset_path=dataset_path)
+        test_data = csv2dataset(csv_path = f"{CPFL_dataRoot}/mid_csv/test.csv", dataset_path=dataset_path)
         #test_data = test_data.map(prepare_dataset, num_proc=10)
         test_dataset = test_data.map(lambda x: prepare_dataset(x, processor=processor), num_proc=10)
 
@@ -483,11 +483,11 @@ def get_overall_wer(args, dataset, test_data="global"):
     if args.num_lms > 1:                                                    # multi-cluster
         for cluster_id in range(args.num_lms):                              # load model 1 by 1
             txt = args.model_in_path.split("#")
-            #model = Data2VecAudioForCTC_CBFL.from_pretrained(txt[0] + "_cluster" + str(cluster_id) + txt[1]+"/final/", config=config, args=args)
+            #model = Data2VecAudioForCTC_CPFL.from_pretrained(txt[0] + "_cluster" + str(cluster_id) + txt[1]+"/final/", config=config, args=args)
             model = load_model(args, txt[0] + "_cluster" + str(cluster_id) + txt[1], config)
             model_lst.append(model)
     else:                                                                   # load from args.model_in_path
-        #model = Data2VecAudioForCTC_CBFL.from_pretrained(args.model_in_path + "/final/", config=config, args=args)
+        #model = Data2VecAudioForCTC_CPFL.from_pretrained(args.model_in_path + "/final/", config=config, args=args)
         model = load_model(args, args.model_in_path, config)
         model_lst.append(model)
     processor = Wav2Vec2Processor.from_pretrained(args.pretrain_name)
@@ -500,12 +500,12 @@ def load_model(args, model_in_path, config):                                # mo
     file_to_check = model_in_path + "/decoder_weights.pth"
     if os.path.isfile(file_to_check):
         # file exists
-        model = Data2VecAudioForCTC_CBFL.from_pretrained(args.model_out_path[:-25] + "data2vec-audio-large-960h_FLASR_global/final", config=config, args=args)
+        model = Data2VecAudioForCTC_CPFL.from_pretrained(args.model_out_path[:-25] + "data2vec-audio-large-960h_FLASR_global/final", config=config, args=args)
         # load decoder's weight
         decoder_state_dict = torch.load(model_in_path + "/decoder_weights.pth")
         model.lm_head.load_state_dict(decoder_state_dict)
     else:
-        model = Data2VecAudioForCTC_CBFL.from_pretrained(model_in_path+"/final/", config=config, args=args)
+        model = Data2VecAudioForCTC_CPFL.from_pretrained(model_in_path+"/final/", config=config, args=args)
     
     return model
 
@@ -785,9 +785,9 @@ def evaluateASR(args, global_round, global_test_dataset, train_dataset_supervise
     
     # eval aggregated model    
     if args.num_lms > 1:                                                                            # more than 1 cluster
-        args.model_in_path = args.model_out_path+"#_CBFLASR_global_round" + str(global_round)
+        args.model_in_path = args.model_out_path+"#_CPFLASR_global_round" + str(global_round)
     else:                                                                                           # if 1 cluster, evaluate that 1
-        args.model_in_path = args.model_out_path+"_cluster0_CBFLASR_global_round" + str(global_round)
+        args.model_in_path = args.model_out_path+"_cluster0_CPFLASR_global_round" + str(global_round)
     
     get_overall_wer(args, global_test_dataset)                                                      # get WER for global testing set
     # Mode 2: 分完群後client train一部分切出來當client test，按句子切。即"這群人訓練的模型，測在這群人身上（不同句子）"
