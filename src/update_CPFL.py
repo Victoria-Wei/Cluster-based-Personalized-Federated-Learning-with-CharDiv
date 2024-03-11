@@ -364,7 +364,7 @@ class ASRLocalUpdate_CPFL(object):
         
         if self.client_id == "public":                                                          # train using public dataset
             save_path = self.model_out_path + "_global"
-            if self.args.CPFL:
+            if self.args.CBFL:
                 dataset = self.ALL_client_train_dataset_supervised                              # train with all client data
             else:
                 dataset = self.client_train_dataset_supervised
@@ -378,8 +378,8 @@ class ASRLocalUpdate_CPFL(object):
                 save_path += "_cluster" + str(self.cluster_id)
             save_path += "_Training" + "Address"
 
-            # CPFL use all training data from all cluster to train
-            if self.args.CPFL:
+            # CBFL use all training data from all cluster to train
+            if self.args.CBFL:
                 dataset = self.ALL_client_train_dataset_supervised                              # train with all client data
             else:
                 dataset = self.client_train_dataset_supervised
