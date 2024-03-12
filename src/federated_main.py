@@ -17,7 +17,7 @@ import shutil
 
 # import from home-made library
 from options import args_parser
-from utils import get_raw_dataset, exp_details, add_cluster_id, load_model, evaluateASR
+from utils import get_raw_dataset, exp_details, add_cluster_id, load_model, evaluateASR, average_weights
 from update_CPFL import update_network_weight, map_to_result
 from training import client_train, centralized_training, client_getEmb
 
@@ -50,7 +50,15 @@ def FL_training_clusters_loop(args, epoch, model_in_path_root, model_out_path, t
                                                                                             # or model in last round
                                                                                             # final result in model_out_path + "_client" + str(client_id) + "_round" + str(global_round) + "_cluster" + str(cluster_id)
                                                                                             #   + ("_Training" + "Address") 
+    
+            w, num_training_samples = final_result                                          # function client_train returns w, num_training_samples
+            local_weights_en.append(copy.deepcopy(w[0]))                                    # save encoder weight for this client
+            local_weights_de.append(copy.deepcopy(w[1]))                                    # save decoder weight for this client
+            num_training_samples_lst.append(num_training_samples)                           # save num of training samples
 
+        # aggregate weights of encoder and decoder
+        global_weights = [average_weights(local_weights_en, num_training_samples_lst, args.WeightedAvg), average_weights(local_weights_de, num_training_samples_lst, args.WeightedAvg)]
+        global_weights_lst.append(global_weights)
     return global_weights_lst                                                               # weight per cluster
     
 # train 1 round for all clusters at once
@@ -202,10 +210,10 @@ def Kmeans_clustering(args, train_dataset_supervised, test_dataset):
     hidden_states_mean_lst, loss_lst, entropy_lst, vocab_ratio_rank_lst, encoder_attention_1D_lst = get_clients_representations(args=args, model_in_path=args.model_in_path, train_dataset_supervised=train_dataset_supervised,
                                                         test_dataset=test_dataset, TEST=False, cluster_id=None)
     # check dimension
-    print("overall entropy_lst shape: ", np.shape(np.array(entropy_lst))) # (batch_size, 1)
-    print("overall hidden_states_mean_lst shape: ", np.shape(np.array(hidden_states_mean_lst)))         # (batch_size, 1024)
-    print("overall vocab_ratio_rank_lst shape: ", np.shape(np.array(vocab_ratio_rank_lst)))             # (batch_size, 32)
-    print("overall encoder_attention_1D_lst shape: ", np.shape(np.array(encoder_attention_1D_lst)))     # (batch_size, ?)
+    print("overall entropy_lst shape: ", np.shape(np.array(entropy_lst)))                               # (num_sample, 1)
+    print("overall hidden_states_mean_lst shape: ", np.shape(np.array(hidden_states_mean_lst)))         # (num_sample, 1024)
+    print("overall vocab_ratio_rank_lst shape: ", np.shape(np.array(vocab_ratio_rank_lst)))             # (num_sample, 32)
+    print("overall encoder_attention_1D_lst shape: ", np.shape(np.array(encoder_attention_1D_lst)))     # (num_sample, ?)
 
     
     # Server selects best K centroid from above candidates
