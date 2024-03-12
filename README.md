@@ -11,11 +11,12 @@ The codes include training of **Fine-tuned ASR** $W_0^G$, **K-means model** $KM$
 1. Train Fine-tuned ASR $W_0^G$, used for extracting clustering metric
    * Important arguments
       - `FL_STAGE`: set to 1
+      - `global_ep`: number of epoch for training Fine-tuned ASR $W_0^G$
 
 2. Perform K-means Clustering, resulting in K-means model ($KM$)
    * Important arguments
       - `FL_STAGE`: set to 3
-      - check the clustering metric in sections [here](https://github.com/Victoria-Wei/Cluster-based-Personalized-Federated-Learning-with-CharDiv/blob/main/src/federated_main.py#L149 "link") and [here](https://github.com/Victoria-Wei/Cluster-based-Personalized-Federated-Learning-with-CharDiv/blob/main/src/federated_main.py#L211 "link")
+      - check the clustering metric in sections [here](https://github.com/Victoria-Wei/Cluster-based-Personalized-Federated-Learning-with-CharDiv/blob/main/src/federated_main.py#L157 "link") and [here](https://github.com/Victoria-Wei/Cluster-based-Personalized-Federated-Learning-with-CharDiv/blob/main/src/federated_main.py#L219 "link")
 
 3. Perform CPFL, resulting in $K$ cluster-specific models
    * important arguments</summary>
