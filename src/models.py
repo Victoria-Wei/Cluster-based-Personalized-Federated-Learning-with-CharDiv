@@ -137,13 +137,13 @@ def get_entropy(inputs_prob):
     batch_entropy = []                                                  # record batch of entropy
     for i in range(batch_size):                                         # compute sample by sample
         entropy_sum = 0                                                 # set to 0
-        for j in range(time_step):                                      # comput time-step by time-step
+        for j in range(time_step):                                      # compute time-step by time-step
             #print(np.shape(np.array(inputs_prob[j][i])))
             prob = inputs_prob[j][i]
             #print(type(labels))
             if torch.is_tensor(prob):
                 prob = prob.cpu().detach().numpy()
-            entropy_sum += scipy.stats.entropy(prob, base=None)       # add to sum of entropy
+            entropy_sum += scipy.stats.entropy(prob, base=None)         # add to sum of entropy
             #print(i, j)
         #print(j)
         batch_entropy.append(entropy_sum / (j+1))                       # average over time
@@ -178,7 +178,7 @@ class Data2VecAudioForCTC_CPFL(Data2VecAudioPreTrainedModel):
             )
 
         self.STAGE=args.STAGE                                                    # current stage
-        self.lm_head = nn.Linear(config.hidden_size, config.vocab_size)          # output字母的"機率"
+        self.lm_head = nn.Linear(config.hidden_size, config.vocab_size)          # output prob of each character
 
         # FedProx
         if args.FL_type == 2:                                                    # FedProx: save global model for loss
@@ -190,9 +190,9 @@ class Data2VecAudioForCTC_CPFL(Data2VecAudioPreTrainedModel):
         # freeze feature_extractor    
         self.freeze_feature_encoder()
 
-        if args.STAGE == 0:                                                      # freeze all, train ASR encoder & decoder
+        if args.STAGE == 0:                                                      # train ASR encoder & decoder
             print("Current stage: 0")    
-        elif args.STAGE == 1:                                                    # freeze all, train ASR decoder alone
+        elif args.STAGE == 1:                                                    # train ASR decoder alone
             print("Current stage: 1")
             self.freeze_data2vec_audio()
 
