@@ -6,28 +6,17 @@ def client_train(args, model_in_path_root, model_out_path, train_dataset_supervi
                                                                                       #                                                                   + "_global/final/"
                                                                                       # or model in last round
                                                                                       # final result in model_out_path + "_client" + str(client_id) + "_round" + str(global_round) + "_cluster" + str(cluster_id)
-                                                                                      #  + ("_Training" + "Address") or + ("_Training" + "AddressoWhisper") or ("_Training" + "AddressoWhisper&Address")
+                                                                                      #  + ("_Training" + "Address")
     # BUILD MODEL for every process
     torch.set_num_threads(1)
     if epoch == 0:                                                                    # start from global model
         model_in_path = model_in_path_root + "_global/final/"
     else:                                                                             # train from model in last round
-        if (args.training_type == 1) or (args.training_type == 3):                    # (supervised) or (semi then supervised)
+        if args.training_type == 1:                                                   # supervised
             model_in_path = model_out_path + "_client" + str(idx) + "_round" + str(epoch-1)
             if cluster_id != None:
                 model_in_path += "_cluster" + str(cluster_id) 
             model_in_path += "_Training" + "Address/final/"
-
-        elif (args.training_type == 2) or (args.training_type == 4):                  # (semi-supervised) or (supervised then semi)
-            model_in_path = model_out_path + "_client" + str(idx) + "_round" + str(epoch-1)
-            if cluster_id != None:
-                model_in_path += "_cluster" + str(cluster_id) 
-            model_in_path += "_Training" + "AddressoWhisper/final/"
-        else:                                                                         # all together
-            model_in_path = model_out_path + "_client" + str(idx) + "_round" + str(epoch-1)
-            if cluster_id != None:
-                model_in_path += "_cluster" + str(cluster_id) 
-            model_in_path += "_Training" + "AddressoWhisperandAddress/final/"
     
     local_model = ASRLocalUpdate_CPFL(args=args, dataset_supervised=train_dataset_supervised, global_test_dataset=test_dataset, client_id=idx, 
                                       cluster_id=cluster_id, model_in_path=model_in_path, model_out_path=model_out_path)
@@ -48,8 +37,8 @@ def centralized_training(args, model_in_path, model_out_path, train_dataset, tes
     local_model.update_weights(global_weights=None, global_round=epoch)               # from model_in_path to train
 
 
-def client_getEmb(args, model_in_path, train_dataset_supervised, test_dataset, idx, cluster_id,
-                  TEST):                                                    # function to get emb. for each client, from model in model_in_path +"/final/"
+def client_getEmb(args, model_in_path, train_dataset_supervised, test_dataset, idx, cluster_id, TEST):                                                    
+                                                                                      # function to get emb. for each client, from model in model_in_path +"/final/"
     torch.set_num_threads(1)
     local_model = ASRLocalUpdate_CPFL(args=args, dataset_supervised=train_dataset_supervised, global_test_dataset=test_dataset, client_id=idx, 
                                       cluster_id=cluster_id, model_in_path=model_in_path, model_out_path=None)
