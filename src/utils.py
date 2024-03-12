@@ -25,16 +25,16 @@ CPFL_dataRoot = os.environ.get('CPFL_dataRoot')
 
 
 
-# 一些參數
+# some parameters
 parser = argparse.ArgumentParser()
-#parser.add_argument('-model', '--model_path', type=str, default="./saves/wav2vec2-base-960h_GRL_0.5", help="Where the model is saved")
+#parser.add_argument('-model', '--model_path', type=str, default="./saves/data2vec-audio-large-960h", help="Where the model is saved")
 parser.add_argument('-opt', '--optimizer', type=str, default="adamw_hf", help="The optimizer to use: adamw_hf, adamw_torch, adamw_apex_fused, or adafactor")
 parser.add_argument('-MGN', '--max_grad_norm', type=float, default=1.0, help="Maximum gradient norm (for gradient clipping)")
 parser.add_argument('-model_type', '--model_type', type=str, default="data2vec", help="Type of the model")
 parser.add_argument('-sr', '--sampl_rate', type=float, default=16000, help="librosa read smping rate")
 parser.add_argument('-lr', '--learning_rate', type=float, default=1e-4, help="Learning rate")
 parser.add_argument('-RD', '--root_dir', default='/mnt/Internal/FedASR/Data/ADReSS-IS2020-data', help="Learning rate")
-parser.add_argument('--AudioLoadFunc', default='librosa', help="用scipy function好像可以比較快")
+parser.add_argument('--AudioLoadFunc', default='librosa', help="scipy function might perform faster")
 args = parser.parse_args(args=[])
 
 
@@ -52,14 +52,13 @@ def prepare_dataset(batch, processor, with_transcript=True):
     return batch
 
 def ID2Label(ID, spk2label):
-    name = ID.split("_")                                                    #  from file name to spkID
-    if (name[1] == 'INV'):                                                  # interviewer is CC
+    name = ID.split("_")                                                    # from file name to spkID
+    if (name[1] == 'INV'):                                                  # interviewer is healthy (not AD)
         label = 0
     else:                                                                   # for participant
         label = spk2label[name[0]]                                          # label according to look-up table
     return label                                                            # return dementia label for this file
 
-# 改版的 
 def csv2dataset(audio_path = '{}/clips/'.format(args.root_dir),
                 csv_path = '{}/mid_csv/test.csv'.format(args.root_dir),
                 dataset_path = "./dataset/", with_transcript=True):
@@ -86,14 +85,14 @@ def csv2dataset(audio_path = '{}/clips/'.format(args.root_dir),
 
     i = 1
     for file_path in dataset['path']:                                       # for all files
-        if 'sentence' in dataset.features:                                  # 只有有sentence且sentence那格沒資訊的時候才跳過
-            if dataset['sentence'][i-1] == None:
-                continue
+        if 'sentence' in dataset.features:                                  # if col "sentence" exists
+            if dataset['sentence'][i-1] == None:                            # but no info
+                continue                                                    # skip to next file
         if args.AudioLoadFunc == 'librosa':
             try:
                 sig, s = librosa.load('{0}/{1}'.format(audio_path,file_path), sr=args.sampl_rate, dtype='float32')  
                                                                             # read audio w/ 16k sr
-            except   ValueError:                                            # 跳過讀不進來的音檔                                                 
+            except   ValueError:                                            # skip files that can't be loaded                                                 
                 print("Err file = ", audio_path,file_path)
         else:
             s, sig = scipy.io.wavfile.read('{0}/{1}'.format(audio_path,file_path))
@@ -103,8 +102,7 @@ def csv2dataset(audio_path = '{}/clips/'.format(args.root_dir),
             my_dict["array"].append(sig)                                    # add audio wave
             if with_transcript:
                 my_dict["text"].append(dataset['sentence'][i-1].upper())    # transcript to uppercase
-            my_dict["dementia_labels"].append(ID2Label(ID=file_path,
-                                                        spk2label=spk2label))
+            my_dict["dementia_labels"].append(ID2Label(ID=file_path, spk2label=spk2label))
         print(i, end="\r")                                                  # print progress
         i += 1
     print("There're ", len(my_dict["path"]), " non-empty files.")
@@ -114,88 +112,22 @@ def csv2dataset(audio_path = '{}/clips/'.format(args.root_dir),
     
     return result_dataset
 
-def TextNor(text):                                                          # text normalization on given text
-    # get rid of things inside []
-    start = text.split("[")                                                 # split by [
-    result = ''
-    for i in range(len(start)):                                             # for all parts
-        end = start[i].split("]")
-        if (len(end) > 1):
-            result += end[1]                                                # after [ & ]
-        else:
-            result += end[0]                                                # before [
-
-    # get rid of &=xxx
-    start = result.split(" ")
-    result = ''
-    for i in range(len(start)):
-        if start[i][:2] != '&=':                                            # skip &=xxx
-            result += start[i] + ' '                                        # add space back
-
-    # get rid of ‡
-    start = result.split("‡")
-    result = ''
-    for i in range(len(start)):
-        result += start[i] + ' '                                            # add space back
-
-
-    # punctuation-free
-    result = result.replace("_", " ").replace("xxx", " ").replace("www", " ").replace("??", "")
-                                                                            # xxx for Unintelligible words
-                                                                            # www for Untranscribed Material
-    punc = '"~!@#$%^&*()_+=><,./?:;{}[]|-‡'
-    out = re.sub(r"[%s]+" %punc, "", result)
-
-    out = " ".join(out.split())                                             # get rid of repeated spaces
-    return out
-
-def get_raw_dataset(args):                                                  # return whole training & testing set of ADReSS or ADReSSo
+def get_raw_dataset(args):                                                  # return whole training & testing set of ADReSS
     if args.dataset == 'adress':                                            # for ADReSS dataset
         if args.FL_STAGE == 4:
-            dataset_path = args.dataset_path_root + "/ADReSS_clustered/"
-            #dataset_path = "./dataset/ADReSS_clustered/"                    # load clustered dataset
+            dataset_path = args.dataset_path_root + "/ADReSS_clustered/"    # load clustered dataset
         else:
-            dataset_path = args.dataset_path_root + "/"
+            dataset_path = args.dataset_path_root + "/"                     # load dataset w.o. cluster info
 
         processor = Wav2Vec2Processor.from_pretrained(args.pretrain_name)
-
-        if args.training_type == 2:                                         # 2 for semi-supervised only
-            train_dataset = None
-            print("Train without ADReSS dataset.")
-        else:
-            # load and map train data
-            train_data = csv2dataset(csv_path = f"{CPFL_dataRoot}/mid_csv/train.csv", dataset_path=dataset_path)
-            #train_data = train_data.map(prepare_dataset, num_proc=10)
-            train_dataset = train_data.map(lambda x: prepare_dataset(x, processor=processor), num_proc=10)
-        # load and map dev data
-        #dev_data = csv2dataset(path = f"{CPFL_dataRoot}/mid_csv/dev.csv")
-        #dev_data = dev_data.map(prepare_dataset, num_proc=10)
+        
+        # load and map train data
+        train_data = csv2dataset(csv_path = f"{CPFL_dataRoot}/mid_csv/train.csv", dataset_path=dataset_path)
+        train_dataset = train_data.map(lambda x: prepare_dataset(x, processor=processor), num_proc=10)
 
         # load and map test data
         test_data = csv2dataset(csv_path = f"{CPFL_dataRoot}/mid_csv/test.csv", dataset_path=dataset_path)
-        #test_data = test_data.map(prepare_dataset, num_proc=10)
         test_dataset = test_data.map(lambda x: prepare_dataset(x, processor=processor), num_proc=10)
-
-    elif args.dataset == 'adresso':                                         # for ADReSSo dataset
-        if args.FL_STAGE == 4:
-            dataset_path = args.dataset_path_root + "/ADReSSo_clustered/"
-            #dataset_path = "./dataset/ADReSSo_clustered/"                   # load clustered dataset
-        else:
-            dataset_path = args.dataset_path_root + "/ADReSSo/"
-
-        processor = Wav2Vec2Processor.from_pretrained(args.pretrain_name)
-
-        if args.training_type == 1:                                         # 1 for supervised only
-            train_dataset = None
-            print("Train without ADReSSo dataset.")
-        else:
-            # load train data
-            train_data = csv2dataset(audio_path = "/mnt/Internal/FedASR/Data/ADReSSo21/diagnosis/train/clips/",
-                                    csv_path = "/mnt/Internal/FedASR/Data/ADReSSo21/diagnosis/train/train_ADReSSo.csv",
-                                    dataset_path=dataset_path, with_transcript=False)
-            # map to desired form
-            train_dataset = train_data.map(lambda x: prepare_dataset(x, processor=processor, with_transcript=False), num_proc=10)
-        test_dataset=None                                                   # No testing set for ADReSSo
 
     return train_dataset, test_dataset
 
@@ -210,23 +142,24 @@ def reorder_col(datasetA, datasetB):                                        # or
     datasetB_reordered = Dataset.from_pandas(dfB)                           # turn back to type 'Dataset'
     return datasetB_reordered
 
-def average_weights(w, num_training_samples_lst, WeightedAvg):                           # given list of clients' weights
+def average_weights(w, num_training_samples_lst, WeightedAvg):              # given list of clients' weights
     """
     Returns the average of the weights.
     """
     w_avg = copy.deepcopy(w[0])                                             # save 1st client's model weight
     if WeightedAvg:                                                         # taking weighted sum
         print("Perform weighted Avg on models!!")
-        for key in w_avg.keys():                                                # each layer
-            w_avg[key] = w[0][key]*num_training_samples_lst[0]                  # for weighted sum
-            for i in range(1, len(w)):                                          # for each participated client
-                w_avg[key] += w[i][key]*num_training_samples_lst[i]             # for weighted sum
-            w_avg[key] = torch.div(w_avg[key], np.array(num_training_samples_lst).sum()) # weighted sum
+        for key in w_avg.keys():                                            # each layer
+            w_avg[key] = w[0][key]*num_training_samples_lst[0]              # for 1st client
+            for i in range(1, len(w)):                                      # for each participated client
+                w_avg[key] += w[i][key]*num_training_samples_lst[i]         # for weighted sum
+            w_avg[key] = torch.div(w_avg[key], np.array(num_training_samples_lst).sum()) 
+                                                                            # weighted sum
     else:
-        for key in w_avg.keys():                                                # each layer
-            for i in range(1, len(w)):                                          # for each participated client
-                w_avg[key] += w[i][key]                                         # sum up weight for this layer
-            w_avg[key] = torch.div(w_avg[key], len(w))                          # take average (element-wise divide)
+        for key in w_avg.keys():                                            # each layer
+            for i in range(1, len(w)):                                      # for each participated client
+                w_avg[key] += w[i][key]                                     # sum up weight for this layer
+            w_avg[key] = torch.div(w_avg[key], len(w))                      # take average (element-wise divide)
     return w_avg
 
 
@@ -239,33 +172,20 @@ def exp_details(args):
     print('    Federated parameters:')
     print(f'    Number of users    : {args.num_users}')
     print(f'    Fraction of users  : {args.frac}')
-    print(f'    eval step is set to  : {args.eval_steps}')
+    print(f'    Eval step is set to  : {args.eval_steps}')
     print(f'    Current training type: {args.training_type}')
     print(f'    Current number of clusters: {args.num_lms}')
 
     return
 
-#def add_cluster_id(example, cluster_id):
-#    example["cluster_id"] = cluster_id
-#    return example
-
 def add_cluster_id(example, cluster_id):
-    #for example, cluster_id in zip(batch, cluster_ids):
     example["cluster_id"] = cluster_id
     return example
 
-def add_entropy(example, entropy, first_time):
-  if first_time:
-    example["entropy_history"] = [entropy]                                  # assign 1st value as list
-  else:
-    example["entropy_history"] = list(np.concatenate((example["entropy_history"][0], [entropy[-1]]), axis=0))
-                                                                            # extend new one into existing features, size = [1, 舊維度+1]
-  return example
-
 def gen_mapping_fn(args, processor, model_lst):
-    def map_to_result(batch):                                               # 一個batch只有一個sample
+    def map_to_result(batch):                                               # 1 sample per batch
         with torch.no_grad():
-            if args.num_lms > 1:                                            # multi-cluster
+            if args.num_lms > 1:                                            # for multi-cluster
                 model_id = batch["cluster_id"]                              # get cluster_id for this sample
                 model = model_lst[model_id]                                 # use corresponding model
             else:
@@ -427,24 +347,21 @@ def compute_measures(
 
 def record_WER(args, result, cluster_num, test_data="global"):
     wer_result = compute_measures(truth=result["text"], hypothesis=result["pred_str"])
-    # 這個set的AD and HC
+    # filter out AD and HC
     HC_result = result.filter(lambda example: example["dementia_labels"]==0 and example['text'] != '')
-    #print(HC_result["dementia_labels"]) # 有確實filter
-    
     AD_result = result.filter(lambda example: example["dementia_labels"]==1 and example['text'] != '')
-    #print(AD_result["dementia_labels"]) # 有確實filter
 
-    if len(HC_result["text"]) != 0:                                         # 有sample就算WER
+    if len(HC_result["text"]) != 0:                                         # if sample exists, compute wer
         wer_HC = compute_measures(truth=HC_result["text"], hypothesis=HC_result["pred_str"])
     else:
-        wer_HC = {"wer": "No sample"}                                       # 沒有sample紀錄沒有
+        wer_HC = {"wer": "No sample"}                                       # or record "No sample"
 
-    if len(AD_result["text"]) != 0:                                         # 有sample就算WER
+    if len(AD_result["text"]) != 0:                                         # if sample exists, compute wer
         wer_AD = compute_measures(truth=AD_result["text"], hypothesis=AD_result["pred_str"])
     else:
-        wer_AD = {"wer": "No sample"}                                       # 沒有sample紀錄沒有
+        wer_AD = {"wer": "No sample"}                                       # or record "No sample"
 
-    if cluster_num != None:                                                 # 有分cluster就紀錄
+    if cluster_num != None:                                                 # record cluster_id if given
         model_name = args.model_in_path.split("/")[-1] + "_cluster" + str(cluster_num)
     else:
         model_name = args.model_in_path.split("/")[-1]
@@ -463,14 +380,14 @@ def record_WER(args, result, cluster_num, test_data="global"):
     }
     df = pd.DataFrame(data)
 
-    # 檢查檔案是否存在
+    # check if file exists
     file_exists = os.path.isfile('./results/Overall_WER.csv')
 
-    # 如果檔案存在，則追加數據時不需要header
+    # if file exists, no header
     if file_exists:
         df.to_csv('./results/Overall_WER.csv', mode='a', header=False, index=False)
     else:
-        # 如果檔案不存在，則創建新檔案並寫入header
+        # create new file
         df.to_csv('./results/Overall_WER.csv', index=False)
 
 def get_overall_wer(args, dataset, test_data="global"):
@@ -483,11 +400,9 @@ def get_overall_wer(args, dataset, test_data="global"):
     if args.num_lms > 1:                                                    # multi-cluster
         for cluster_id in range(args.num_lms):                              # load model 1 by 1
             txt = args.model_in_path.split("#")
-            #model = Data2VecAudioForCTC_CPFL.from_pretrained(txt[0] + "_cluster" + str(cluster_id) + txt[1]+"/final/", config=config, args=args)
             model = load_model(args, txt[0] + "_cluster" + str(cluster_id) + txt[1], config)
             model_lst.append(model)
     else:                                                                   # load from args.model_in_path
-        #model = Data2VecAudioForCTC_CPFL.from_pretrained(args.model_in_path + "/final/", config=config, args=args)
         model = load_model(args, args.model_in_path, config)
         model_lst.append(model)
     processor = Wav2Vec2Processor.from_pretrained(args.pretrain_name)
@@ -509,109 +424,86 @@ def load_model(args, model_in_path, config):                                # mo
     
     return model
 
-def save_weights(folder_to_save, weights):
-    encoder_state_dict, decoder_state_dict = weights
-    #torch.save(encoder_state_dict, folder_to_save + "/encoder_weights.pth")
-    os.makedirs(folder_to_save, exist_ok=True)
-    torch.save(decoder_state_dict, folder_to_save + "/decoder_weights.pth")
-
 ############################################################################################
-# 切client、切train / test相關
+# Splits-related: client, train / test
 ############################################################################################
-#先找這個spk的INV or PAR，取後面20%的資料出來（剩下是training）
+# for each INV & PAR, take 80% of data as training and 20%  as testing
 def split_train_test_spk(source_dataset, client_spk, identity, DEV):
     # identity: "INV" or "PAR"
     subsetA = source_dataset.filter(lambda example: example["path"].startswith(client_spk+"_"+identity))
-                                                    # 先對這個spk的INV or PAR做處理
-    #print(client_spk+"_"+identity)
-    #print(subsetA["path"])                          # filter兩次看上去正常
-    subsetA = subsetA.sort("path")                  # 按說話的先後次序排序
-    LEN_subsetA = len(subsetA)                      # 這個spk的INV or PAR有多少sample
+                                                    # filter out a single spk
+    subsetA = subsetA.sort("path")                  
+    LEN_subsetA = len(subsetA)                      # num of sample for this spk
     if DEV:
-        num_sample_train = max(1, int(LEN_subsetA*0.7))       # 最少一個sample，最多70%的sample當training set
-        num_sample_trainDev = max(1, int(LEN_subsetA*0.8))       # 最少一個sample，最多80%的sample當training + dev set
-        #print(num_sample, " / ", LEN_subsetA)           # 確認數量
+        num_sample_train = max(1, int(LEN_subsetA*0.7))       # min 1, use 70% of samples as training
+        num_sample_trainDev = max(1, int(LEN_subsetA*0.8))    # min 1, use 80% as (training + dev)
         
-        if num_sample_train == 0:                             # 若training set長度為0
-            train_dataset = Dataset.from_dict({})       # 回傳空的dataset
+        if num_sample_train == 0:                             # if 0 sample
+            train_dataset = Dataset.from_dict({})             # return empty dataset
         else:
             train_dataset = subsetA.select(range(0, num_sample_train))
-                                                        # 前面的當training set
-        if num_sample_train == num_sample_trainDev:     # 若dev set長度為0
-            test_dataset = Dataset.from_dict({})        # 回傳空的dataset
+                                                              # select 70% as training
+        if num_sample_train == num_sample_trainDev:           # if 0 sample
+            test_dataset = Dataset.from_dict({})              # return empty dataset
         else:        
             test_dataset = subsetA.select(range(num_sample_train, num_sample_trainDev))
-                                                        # 後面的當dev set
+                                                              # select 10% as dev
     else:
-        num_sample = max(1, int(LEN_subsetA*0.8))       # 最少一個sample，最多80%的sample當training set
-        #print(num_sample, " / ", LEN_subsetA)           # 確認數量
+        num_sample = max(1, int(LEN_subsetA*0.8))             # min 1, use 80% as training
         
-        if num_sample == 0:                             # 若training set長度為0
-            train_dataset = Dataset.from_dict({})       # 回傳空的dataset
+        if num_sample == 0:                                   # if 0 sample
+            train_dataset = Dataset.from_dict({})             # return empty dataset
         else:
             train_dataset = subsetA.select(range(0, num_sample))
-                                                        # 前面的當training set
-        if num_sample == LEN_subsetA:                   # 若testing set長度為0
-            test_dataset = Dataset.from_dict({})        # 回傳空的dataset
+                                                              # select 80% as training
+        if num_sample == LEN_subsetA:                         # if 0 sample
+            test_dataset = Dataset.from_dict({})              # return empty dataset
         else:        
             test_dataset = subsetA.select(range(num_sample, LEN_subsetA))
-                                                        # 後面的當testing set
-
-    """
-    # 一個一個加入dataset的作法
-    test_dataset = source_dataset.filter(lambda example: example["path"].startswith(client_spk+"_"+identity+"_"+str(LEN_subsetA-1)))
-                                                    # 最後一個sample當作testing set的第一個sample
-    for i in range(num_sample-1):                   # 繼續取剩下的samples
-        sample = source_dataset.filter(lambda example: example["path"].startswith(client_spk+"_"+identity+"_"+str(LEN_subsetA-2-i)))
-                                                    # 倒數第二個 到 倒數第num_sample個
-        test_dataset = test_dataset.add_item(sample[0])
-                                                    # 加入新sample
-    """
+                                                              # select 20% as testing
     return train_dataset, test_dataset
 
 from datasets import concatenate_datasets
 def concatenate_ds(datasetA, datasetB):
-    if len(datasetA) != 0 and len(datasetB) != 0:   # 皆不為0，直接合併
+    if len(datasetA) != 0 and len(datasetB) != 0:             # if both non-empty, combine them
         concatenated_dataset = concatenate_datasets([datasetA, datasetB])
         return concatenated_dataset
     
-    # 至少有一個為0
-    if len(datasetA) != 0:                          # A不為0就回傳A
+    # at least one of them is empty
+    if len(datasetA) != 0:                                    # A not empty, return it
         return datasetA    
-    return datasetB                                 # B不為0就回傳B。或兩個皆為0，回傳B做代表
+    return datasetB                                           # return B
 
-# 回傳這個client的train / test set
-def split_train_test_client(client_spks, source_dataset, DEV=False):    # default: no dev
-    # 先做第一個spk，分別抓出INV與PAR的training(80%) and testing(20%) data
+# return train / test set of this client
+def split_train_test_client(client_spks, source_dataset, DEV=False):    
+                                                              # default: no dev
+    # for 1st spk_id, get training(80%) and testing(20%) data for INV and PAR
     client_spk = client_spks[0]
     train_dataset_INV, test_dataset_INV = split_train_test_spk(source_dataset, client_spk, "INV", DEV)
     train_dataset_PAR, test_dataset_PAR = split_train_test_spk(source_dataset, client_spk, "PAR", DEV)
 
-    # 把這個spk的INV與PAR合併
+    # combine INV and PAR
     train_dataset_client = concatenate_ds(train_dataset_INV, train_dataset_PAR)
-    #print(train_dataset_INV["path"], train_dataset_PAR["path"])
-    #print(train_dataset_client["path"])             # 內容的確是train_dataset_INV + train_dataset_PAR
     test_dataset_client = concatenate_ds(test_dataset_INV, test_dataset_PAR)
 
-    #print(len(train_dataset_client), len(test_dataset_client))
-    for i in range(len(client_spks)-1):             # 一個個spk處理
-        # 從第二個spk開始，分別抓出INV與PAR的training(80%) and testing(20%) data
+    for i in range(len(client_spks)-1):                       # for each spk_id
+        # get training(80%) and testing(20%) data for INV and PAR
         client_spk = client_spks[i+1]
         train_dataset_INV, test_dataset_INV = split_train_test_spk(source_dataset, client_spk, "INV", DEV)
         train_dataset_PAR, test_dataset_PAR = split_train_test_spk(source_dataset, client_spk, "PAR", DEV)
 
-        # 把這個spk的INV與PAR合併
+        # combine INV and PAR
         train_dataset_spk = concatenate_ds(train_dataset_INV, train_dataset_PAR)
         test_dataset_spk = concatenate_ds(test_dataset_INV, test_dataset_PAR)
         #print(len(train_dataset_spk), len(test_dataset_spk))
 
-        # 把這個spk的資料合併到client資料中
+        # combine to client data
         train_dataset_client = concatenate_ds(train_dataset_client, train_dataset_spk)
         test_dataset_client = concatenate_ds(test_dataset_client, test_dataset_spk)    
 
-    #print(len(train_dataset_client), len(test_dataset_client)) # 數量上看起來沒問題
     return train_dataset_client, test_dataset_client
 
+# use when each spk is a client
 def client2spk(client_id):
   client2spk_dict = { '1': 'S058',  '2': 'S030',  '3': 'S064',  '4': 'S104',  '5': 'S048', 
                       '6': 'S118',  '7': 'S122',  '8': 'S001',  '9': 'S087', '10': 'S013',
@@ -625,9 +517,10 @@ def client2spk(client_id):
                      '46': 'S063', '47': 'S061', '48': 'S125', '49': 'S062', '50': 'S012', 
                      '51': 'S138', '52': 'S024', '53': 'S052', '54': 'S142'}
   return [client2spk_dict[str(client_id+1)]]
-# Mode 1: 和現在一樣，分完群後client train就全部拿來訓練
-# Mode 2: 分完群後client train一部分切出來當client test，按句子切
-# Mode 3: 分完群後client train一部分切出來當client test，按人切（暫略
+    
+# Mode 1: no client test
+# Mode 2: client test by utt
+# Mode 2: client dev by utt
 def train_split_supervised(args, dataset, client_id, cluster_id):
     # generate sub- training set for given user-ID
     if args.num_users > 5:                                                                 # for "spk as client" setting
@@ -669,23 +562,23 @@ def train_split_supervised(args, dataset, client_id, cluster_id):
         return dataset
 
     print("Generating client training set for client ", str(client_id), "...")
-    if cluster_id == None:                                                                  # 不分群
+    if cluster_id == None:                                                                  # no cluster
         client_train_dataset = dataset.filter(lambda example: example["path"].startswith(tuple(client_spks)))
-    else:                                                                                   # 分群，filter 1次到位
+    else:                                                                                   # get cluster-specific dataset
         print("Generating client training set for cluster ", str(cluster_id), "...")
         client_train_dataset = dataset.filter(lambda example: example["path"].startswith(tuple(client_spks)) and example['cluster_id'] == cluster_id)
     
-    # Mode 1: 分完群後client train就全部拿來訓練，沒有client test
+    # Mode 1: no client test
     if args.eval_mode == 1:                             
         return client_train_dataset, None
-    # Mode 2: 分完群後client train一部分切出來當client test，按句子切。即"這群人訓練的模型，測在這群人身上（不同句子）"
+    # Mode 2: client test by utt
     elif args.eval_mode == 2: 
         train_dataset_client, test_dataset_client = split_train_test_client(client_spks, client_train_dataset)
         return train_dataset_client, test_dataset_client
-    elif args.eval_mode == 3:                       # 70% training & 10% dev
+    elif args.eval_mode == 3:                                                               # 70% training & 10% dev
         train_dataset_client, dev_dataset_client = split_train_test_client(client_spks, client_train_dataset, DEV=True)
         return train_dataset_client, dev_dataset_client
-    # default: 分完群後client train就全部拿來訓練，沒有client test
+    # default: no client test
     return client_train_dataset, None 
     
 def evaluateASR(args, global_round, global_test_dataset, train_dataset_supervised=None):
@@ -700,24 +593,20 @@ def evaluateASR(args, global_round, global_test_dataset, train_dataset_supervise
         if args.num_lms > 1:                                                                        # more than 1 cluster
             save_path += "#"
 
-        if (args.training_type == 1) or (args.training_type == 3):                                  # (supervised) or (semi then supervised)
+        if args.training_type == 1:                                                                 # supervised
             save_path += "_Training" + "Address"
-        elif (args.training_type == 2) or (args.training_type == 4):                                # (semi-supervised) or (supervised then semi)
-            save_path += "_Training" + "AddressoWhisper"
-        else:
-            save_path += "_Training" + "AddressoWhisperandAddress"
-        if args.FL_type == 3: # FML
-            save_path += "_localModel" # eval local model
+
+        if args.FL_type == 3:                                                                       # FML
+            save_path += "_localModel"                                                              # eval local model
         args.model_in_path = save_path
         
         get_overall_wer(args, global_test_dataset)                                                  # get WER for global testing set
-        # Mode 2: 分完群後client train一部分切出來當client test，按句子切。即"這群人訓練的模型，測在這群人身上（不同句子）"
-        # Mode 3: 類似2，只是train在70% data上，測在10% dev與20% test上
-        if args.eval_mode == 2 or args.eval_mode == 3:                                              # 測20% test
-            # filter出client i的local_test_dataset，不分群（但dataset有cluster_id）
-            # supervised才有人工的ground truth label
-            origin_eval_mode = args.eval_mode
-            args.eval_mode = 2                                                                      # 測20% test
+        
+        # Mode 2: client test by utt
+        # Mode 3: client dev by utt
+        if args.eval_mode == 2 or args.eval_mode == 3:                                              # test on 20%
+            origin_eval_mode = args.eval_mode                                                       # record eval_mode for later use
+            args.eval_mode = 2                                                                      # test on 20%
             _, test_dataset_client = train_split_supervised(args, train_dataset_supervised, client_id=i, cluster_id=None)
 
             if len(test_dataset_client) == 0:                                                       # no testing sample for client i 
@@ -726,9 +615,7 @@ def evaluateASR(args, global_round, global_test_dataset, train_dataset_supervise
                 get_overall_wer(args, test_dataset_client, test_data="test")                        # get WER for each client's testing set
             args.eval_mode = origin_eval_mode                                                       # back to original eval_mode
         
-        if args.eval_mode == 3:                                                                     # 測10% dev
-            # filter出client i的local_test_dataset，不分群（但dataset有cluster_id）
-            # supervised才有人工的ground truth label
+        if args.eval_mode == 3:                                                                     # test on 10% dev
             _, test_dataset_client = train_split_supervised(args, train_dataset_supervised, client_id=i, cluster_id=None)
 
             if len(test_dataset_client) == 0:                                                       # no testing sample for client i 
@@ -743,13 +630,12 @@ def evaluateASR(args, global_round, global_test_dataset, train_dataset_supervise
         args.model_in_path = args.model_out_path+"_cluster0_CPFLASR_global_round" + str(global_round)
     
     get_overall_wer(args, global_test_dataset)                                                      # get WER for global testing set
-    # Mode 2: 分完群後client train一部分切出來當client test，按句子切。即"這群人訓練的模型，測在這群人身上（不同句子）"
-    # Mode 3: 類似2，只是train在70% data上，測在10% dev與20% test上
-    if args.eval_mode == 2 or args.eval_mode == 3:                                                  # 也測在local test上
+    
+    # Mode 2: client test by utt
+    # Mode 3: client dev by utt
+    if args.eval_mode == 2 or args.eval_mode == 3:                                                  # test on local test & dev
         for i in idxs_users:                                                                        # for all clients that perform training
-            # filter出client i的local_test_dataset，不分群（但dataset有cluster_id）
-            # supervised才有人工的ground truth label
-            origin_eval_mode = args.eval_mode
+            origin_eval_mode = args.eval_mode                                                       # record eval_mode for later use
             args.eval_mode = 2
             _, test_dataset_client = train_split_supervised(args, train_dataset_supervised, client_id=i, cluster_id=None)
 
@@ -759,10 +645,8 @@ def evaluateASR(args, global_round, global_test_dataset, train_dataset_supervise
                 get_overall_wer(args, test_dataset_client, test_data="test")                        # get WER for each client's testing set
             args.eval_mode = origin_eval_mode                                                       # back to original eval_mode
     
-    if args.eval_mode == 3:                                                                     # 測10% dev
+    if args.eval_mode == 3:                                                                         # test on 10% dev
         for i in idxs_users:  
-            # filter出client i的local_test_dataset，不分群（但dataset有cluster_id）
-            # supervised才有人工的ground truth label
             _, test_dataset_client = train_split_supervised(args, train_dataset_supervised, client_id=i, cluster_id=None)
 
             if len(test_dataset_client) == 0:                                                       # no testing sample for client i 
