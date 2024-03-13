@@ -19,13 +19,18 @@ The codes include training of **Fine-tuned ASR** $W_0^G$, **K-means model** $KM$
    * Important arguments
       - `FL_STAGE`: set to 1
       - `global_ep`: number of epoch for training Fine-tuned ASR $W_0^G$
+      - `training_type`: only 1 (supervised) supported
 
 2. Perform K-means Clustering, resulting in K-means model ($KM$)
    * Important arguments
       - `FL_STAGE`: set to 3
+      - `training_type`: only 1 (supervised) supported
       - check the clustering metric in sections [here](https://github.com/Victoria-Wei/Cluster-based-Personalized-Federated-Learning-with-CharDiv/blob/main/src/federated_main.py#L157 "link") and [here](https://github.com/Victoria-Wei/Cluster-based-Personalized-Federated-Learning-with-CharDiv/blob/main/src/federated_main.py#L219 "link")
 
 3. Perform CPFL, resulting in $K$ cluster-specific models
    * important arguments</summary>
       - `FL_STAGE`: set to 4
+      - `training_type`: only 1 (supervised) supported
+      - `N_Kmeans_update`: set using the same number as that of `epochs` to avoid re-clustering
+      - `eval_mode`: set to 2 for 80% client training data and 20% client testing data, or set to 3 for 70% client training data and 10% client validation data
 
