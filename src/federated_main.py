@@ -14,6 +14,7 @@ from transformers import Data2VecAudioConfig
 from collections import Counter
 import torch
 import shutil
+import copy
 
 # import from home-made library
 from options import args_parser
