@@ -87,6 +87,7 @@ def csv2dataset(audio_path = '{}/clips/'.format(args.root_dir),
     for file_path in dataset['path']:                                       # for all files
         if 'sentence' in dataset.features:                                  # if col "sentence" exists
             if dataset['sentence'][i-1] == None:                            # but no info
+                i++
                 continue                                                    # skip to next file
         if args.AudioLoadFunc == 'librosa':
             try:
